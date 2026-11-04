@@ -319,7 +319,7 @@ let idx = 0, answers = [], planet = null, student = "";
 
 /* ---------- 결과 저장 설정 ----------
    구글 시트로 받으려면 Apps Script 웹 앱 주소를 아래 따옴표 안에 붙여 넣으세요. */
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbw_vsgGAu5SBK7K7TsGAQnrUh3NV-oyNwZHrJqRJhT5YLeVYgIbZb0iFfLvTNPbNVu1yg/exec";
+const SHEET_URL = "https://script.google.com//macros//s//AKfycbw_vsgGAu5SBK7K7TsGAQnrUh3NV-oyNwZHrJqRJhT5YLeVYgIbZb0iFfLvTNPbNVu1yg//exec";
 const hasClaude = !!(window.claude && window.claude.use);
 const dbP = hasClaude ? window.claude.use("db") : Promise.resolve(null);
 const userP = hasClaude ? window.claude.use("user") : Promise.resolve(null);
