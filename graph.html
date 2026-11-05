@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>편평도 그래프 — 반 전체 데이터</title>
+<style>
+:root{
+  --paper:#eef3f6; --grid:#d5e1e9; --ink:#1d2a36; --muted:#5b6b78; --line:#c3d2dc;
+  --panel:#ffffff; --accent:#2457a6; --accent-ink:#ffffff; --field:#ffffff;
+  --iron:#d4552f; --rocky:#2f7fd4; --ice:#1d9e8f; --gas:#d99520; --real:#1d2a36;
+  --serif:"Nanum Myeongjo","AppleMyungjo","Noto Serif KR","Batang",serif;
+  --sans:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0f1c2b; --grid:#1c3046; --ink:#e3ecf3; --muted:#9db0c0; --line:#2b4560;
+    --panel:#13243a; --accent:#7fb0ff; --accent-ink:#0b1626; --field:#0f1c2b;
+    --iron:#ff8a63; --rocky:#6cb4ff; --ice:#4fd6c5; --gas:#ffc15a; --real:#e3ecf3;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0f1c2b; --grid:#1c3046; --ink:#e3ecf3; --muted:#9db0c0; --line:#2b4560;
+  --panel:#13243a; --accent:#7fb0ff; --accent-ink:#0b1626; --field:#0f1c2b;
+  --iron:#ff8a63; --rocky:#6cb4ff; --ice:#4fd6c5; --gas:#ffc15a; --real:#e3ecf3;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; color:var(--ink); font-family:var(--sans); line-height:1.6;
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:24px 24px;
+}
+main{max-width:1180px;margin:0 auto;padding:clamp(18px,4vw,40px) clamp(14px,3vw,28px) 56px}
+h1{font-family:var(--serif);font-size:clamp(1.7rem,4vw,2.5rem);line-height:1.2;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 22px;max-width:62ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.loader{display:grid;gap:10px;margin-bottom:18px}
+.loader-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.loader input[type=url]{flex:1 1 320px;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--field)}
+.btn{border:0;border-radius:8px;padding:9px 16px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.file{position:relative;overflow:hidden}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.status{font-size:.92rem;color:var(--muted);margin:0}
+.status.err{color:var(--iron)}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.chart-wrap{position:relative;padding:10px 10px 6px}
+#chart{width:100%;height:auto;display:block}
+#chart text{font-family:var(--sans)}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:7px 10px;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;display:none}
+.side{display:grid;gap:14px}
+.side h2{font-family:var(--serif);font-size:1.05rem;margin:0 0 10px}
+.check{display:flex;gap:9px;align-items:flex-start;margin:7px 0;cursor:pointer}
+.check input{margin-top:5px;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:6px}
+.seg button{background:transparent;border:0;padding:6px 14px}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+.legend-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:7px;vertical-align:-1px}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.note{font-size:.85rem;color:var(--muted);margin:10px 0 0}
+.empty{fill:var(--muted);font-size:15px}
+</style>
+</head>
+<body>
+<main>
+  <h1>q와 편평도, 반 전체 그래프</h1>
+  <p class="sub">반 전체가 만든 행성의 원심력·중력 비 q와 편평도 f를 한 그래프에 모읍니다. 성분별 추세선과 실제 행성을 함께 놓고 가설을 검증하세요.</p>
+
+  <section class="panel loader" aria-label="데이터 불러오기">
+    <div class="loader-row">
+      <input type="url" id="url" placeholder="Apps Script 웹 앱 주소 또는 시트의 CSV 게시 주소" aria-label="데이터 주소">
+      <button class="btn" id="loadBtn">불러오기</button>
+      <label class="btn ghost file">CSV 파일 열기<input type="file" id="file" accept=".csv,text/csv"></label>
+      <button class="btn ghost" id="demoBtn">예시 데이터</button>
+    </div>
+    <p class="status" id="status" aria-live="polite">데이터를 불러오면 그래프가 그려집니다.</p>
+  </section>
+
+  <div class="layout">
+    <section class="panel chart-wrap" aria-label="그래프">
+      <svg id="chart" viewBox="0 0 820 540" role="img" aria-label="q와 편평도 산점도"></svg>
+      <div class="tip" id="tip"></div>
+    </section>
+
+    <aside class="side">
+      <div class="panel">
+        <h2>표시</h2>
+        <label class="check"><input type="checkbox" id="optTrend" checked><span>성분별 추세선 (원점을 지나는 직선)</span></label>
+        <label class="check"><input type="checkbox" id="optReal" checked><span>실제 행성 6개 (NASA 자료)</span></label>
+        <label class="check"><input type="checkbox" id="optApprox"><span>근사식 f = 1.25q (활동 5)</span></label>
+        <div>축 눈금
+          <div class="seg" role="group" aria-label="축 눈금">
+            <button id="linBtn" aria-pressed="true">일반</button>
+            <button id="logBtn" aria-pressed="false">로그</button>
+          </div>
+        </div>
+        <p class="note">지구·화성처럼 q가 아주 작은 점은 로그 눈금에서 잘 보입니다.</p>
+      </div>
+
+      <div class="panel">
+        <h2>성분별 추세선</h2>
+        <table>
+          <thead><tr><th>성분</th><th class="num">행성 수</th><th class="num">기울기 f ÷ q</th></tr></thead>
+          <tbody id="slopes"></tbody>
+        </table>
+        <p class="note">기울기는 원점을 지나는 직선을 최소제곱법으로 맞춘 값입니다.</p>
+      </div>
+
+      <button class="btn" id="saveBtn">그래프 이미지 저장</button>
+    </aside>
+  </div>
+</main>
+
+<script>
+(() => {
+"use strict";
+
+/* 데이터 주소를 미리 넣어 두면 페이지를 열 때 자동으로 불러옵니다. */
+const DATA_URL = "";
+
+const G = 6.674e-11;
+const COMP = [
+  {key:"Iron",      name:"철",   color:"--iron"},
+  {key:"Rocky",     name:"암석", color:"--rocky"},
+  {key:"Water-Ice", name:"얼음", color:"--ice"},
+  {key:"Gas-Giant", name:"기체", color:"--gas"}
+];
+const REAL = [
+  ["목성",9.93,1.33,0.0649],["토성",10.66,0.69,0.0980],["천왕성",17.24,1.27,0.0229],
+  ["해왕성",16.11,1.64,0.0171],["지구",23.93,5.51,0.00335],["화성",24.62,3.93,0.00589]
+].map(([name,P,rho,f]) => ({name, q:qOf(P,rho), f}));
+
+function qOf(periodH, densityGcc){
+  const w = 2 * Math.PI / (periodH * 3600);
+  return 3 * w * w / (4 * Math.PI * G * densityGcc * 1000);
+}
+
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let points = [], logScale = false;
+
+/* ---------- 불러오기 ---------- */
+function setStatus(msg, err){ const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"' && text[i+1] === '"'){ cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ","){ row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r"){
+      if (c === "\r" && text[i+1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length){ row.push(cell); rows.push(row); }
+  const head = (rows.shift() || []).map(h => h.trim());
+  return rows.filter(r => r.some(v => v.trim() !== "")).map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+}
+
+function toPoints(rows){
+  const latest = new Map(), out = [];
+  rows.forEach((r, i) => {
+    const comp = String(r.composition || "").trim();
+    const P = parseFloat(r.periodH), rho = parseFloat(r.density), f = parseFloat(r.f);
+    if (!COMP.some(c => c.key === comp) || !(P > 0) || !(rho > 0) || !(f >= 0)) return;
+    const p = {comp, q:qOf(P, rho), f, P, rho};
+    const who = r.student ? String(r.student).trim() : "";
+    if (who) latest.set(who, p); else out.push(p);
+  });
+  return out.concat([...latest.values()]);
+}
+
+function useRows(rows, source){
+  points = toPoints(rows);
+  if (!points.length){ setStatus(`${source}에서 쓸 수 있는 행성 데이터를 찾지 못했어요. composition, density, periodH, f 열이 있는지 확인하세요.`, true); }
+  else setStatus(`${source}에서 행성 ${points.length}개를 불러왔어요.`);
+  draw();
+}
+
+async function loadUrl(url){
+  if (!url){ setStatus("주소를 입력하세요.", true); return; }
+  setStatus("불러오는 중…");
+  try{
+    const res = await fetch(url, {redirect:"follow"});
+    if (!res.ok) throw new Error(res.status);
+    const text = await res.text();
+    const t = text.trim();
+    let rows;
+    if (t.startsWith("{") || t.startsWith("[")){
+      const j = JSON.parse(t);
+      rows = Array.isArray(j) ? j : (j.rows || []);
+    } else rows = parseCSV(text);
+    useRows(rows, "주소");
+  }catch(e){
+    setStatus("주소에서 데이터를 불러오지 못했어요. 주소와 배포 설정을 확인하거나, 시트를 CSV로 내려받아 \"CSV 파일 열기\"를 쓰세요.", true);
+  }
+}
+
+$("loadBtn").addEventListener("click", () => loadUrl($("url").value.trim()));
+$("url").addEventListener("keydown", e => { if (e.key === "Enter") $("loadBtn").click(); });
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  useRows(parseCSV(await f.text()), `파일 ${f.name}`);
+  e.target.value = "";
+});
+
+/* 예시 데이터: 앱과 같은 물리 계산으로 가상의 반을 만든다 */
+$("demoBtn").addEventListener("click", () => {
+  const I = {"Iron":0.35,"Rocky":0.33,"Water-Ice":0.26,"Gas-Giant":0.22};
+  const K = {"Iron":0.77,"Rocky":1.0,"Water-Ice":1.43};
+  const ME = 5.972e24, RE = 6.371e6, RJ = 6.9911e7;
+  const rows = [];
+  for (let i = 0; i < 28; i++){
+    const comp = COMP[Math.floor(Math.random() * 4)].key;
+    const [lo, hi] = comp === "Gas-Giant" ? [90, 300] : [0.1, 20];
+    const mE = lo * Math.pow(hi / lo, Math.random());
+    const R0 = comp === "Gas-Giant" ? RJ * Math.pow(mE / 317.83, -0.04) : K[comp] * RE * Math.pow(mE, 0.27);
+    const GM = G * mE * ME;
+    let w = 2 * Math.PI / (80 * Math.pow(0.05, Math.random()) * 3600);
+    if (w * w * R0 ** 3 / GM > 0.16) w = Math.sqrt(0.16 * GM / R0 ** 3);
+    const k2 = (2.5 - 3.75 * I[comp]) ** 2;
+    let Re = R0, f = 0;
+    for (let j = 0; j < 8; j++){ f = 2.5 * (w * w * Re ** 3 / GM) / (1 + k2); Re = R0 / Math.cbrt(1 - f); }
+    rows.push({composition:comp, periodH:2 * Math.PI / w / 3600, density:mE * ME / (4 / 3 * Math.PI * R0 ** 3) / 1000, f});
+  }
+  useRows(rows, "예시 데이터");
+});
+
+/* ---------- 그래프 ---------- */
+const W = 820, H = 540, M = {l:78, r:24, t:22, b:62};
+const ns = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent, text){
+  const e = document.createElementNS(ns, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e); return e;
+}
+function slopeOf(pts){
+  let sxy = 0, sxx = 0; pts.forEach(p => { sxy += p.q * p.f; sxx += p.q * p.q; });
+  return sxx ? sxy / sxx : NaN;
+}
+function fmt(v){
+  if (v === 0) return "0";
+  const a = Math.abs(v);
+  if (a >= 0.1) return v.toFixed(2);
+  if (a >= 0.01) return v.toFixed(3);
+  if (a >= 0.001) return v.toFixed(4);
+  return v.toExponential(1);
+}
+
+function draw(){
+  const svg = $("chart"); svg.innerHTML = "";
+  const showReal = $("optReal").checked, showTrend = $("optTrend").checked, showApprox = $("optApprox").checked;
+  const ink = css("--ink"), muted = css("--muted"), grid = css("--grid"), line = css("--line");
+
+  const all = points.concat(showReal ? REAL : []);
+  renderSlopes();
+  if (!all.length){
+    el("text", {x:W/2, y:H/2, "text-anchor":"middle", class:"empty"}, svg, "데이터를 불러오면 여기에 그래프가 그려집니다.");
+    return;
+  }
+
+  let xmin, xmax, ymin, ymax, X, Y, xt, yt;
+  const qs = all.map(p => p.q), fs = all.map(p => p.f).filter(v => v > 0);
+  if (logScale){
+    xmin = Math.min(...qs) / 1.6; xmax = Math.max(...qs) * 1.6;
+    ymin = Math.min(...fs) / 1.6; ymax = Math.max(...fs) * 1.6;
+    if (showApprox){ ymax = Math.max(ymax, 1.25 * xmax); }
+    const lx = v => (Math.log10(v) - Math.log10(xmin)) / (Math.log10(xmax) - Math.log10(xmin));
+    const ly = v => (Math.log10(v) - Math.log10(ymin)) / (Math.log10(ymax) - Math.log10(ymin));
+    X = v => M.l + lx(v) * (W - M.l - M.r);
+    Y = v => H - M.b - ly(v) * (H - M.t - M.b);
+    xt = logTicks(xmin, xmax); yt = logTicks(ymin, ymax);
+  } else {
+    xmin = 0; ymin = 0;
+    xmax = niceMax(Math.max(...qs) * 1.06);
+    ymax = niceMax(Math.max(...all.map(p => p.f), showApprox ? 1.25 * Math.max(...qs) : 0) * 1.06);
+    X = v => M.l + (v - xmin) / (xmax - xmin) * (W - M.l - M.r);
+    Y = v => H - M.b - (v - ymin) / (ymax - ymin) * (H - M.t - M.b);
+    xt = linTicks(xmax); yt = linTicks(ymax);
+  }
+
+  // 격자와 눈금
+  const g = el("g", {}, svg);
+  xt.forEach(v => {
+    el("line", {x1:X(v), x2:X(v), y1:M.t, y2:H - M.b, stroke:grid, "stroke-width":1}, g);
+    el("text", {x:X(v), y:H - M.b + 20, "text-anchor":"middle", "font-size":13, fill:muted}, g, fmt(v));
+  });
+  yt.forEach(v => {
+    el("line", {x1:M.l, x2:W - M.r, y1:Y(v), y2:Y(v), stroke:grid, "stroke-width":1}, g);
+    el("text", {x:M.l - 10, y:Y(v) + 4, "text-anchor":"end", "font-size":13, fill:muted}, g, fmt(v));
+  });
+  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b, fill:"none", stroke:line}, g);
+  el("text", {x:(M.l + W - M.r) / 2, y:H - 14, "text-anchor":"middle", "font-size":14, fill:ink}, g, "q (적도에서 원심력 ÷ 중력)");
+  el("text", {x:18, y:(M.t + H - M.b) / 2, "text-anchor":"middle", "font-size":14, fill:ink, transform:`rotate(-90 18 ${(M.t + H - M.b) / 2})`}, g, "편평도 f");
+
+  const clip = el("clipPath", {id:"plot"}, el("defs", {}, svg));
+  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b}, clip);
+  const plot = el("g", {"clip-path":"url(#plot)"}, svg);
+  const x0 = logScale ? xmin : 0;
+
+  // 근사식 직선
+  if (showApprox){
+    el("line", {x1:X(x0), y1:Y(logScale ? 1.25 * x0 : 0), x2:X(xmax), y2:Y(1.25 * xmax), stroke:ink, "stroke-width":2, "stroke-dasharray":"8 6"}, plot);
+    const lxp = Math.min(xmax / 1.15, (ymax / 1.25) / 1.1);
+    el("text", {x:X(lxp) - 6, y:Y(1.25 * lxp) - 10, "text-anchor":"end", "font-size":13, fill:ink}, plot, "f = 1.25q");
+  }
+
+  // 성분별 추세선
+  if (showTrend){
+    COMP.forEach(c => {
+      const pts = points.filter(p => p.comp === c.key);
+      if (pts.length < 2) return;
+      const k = slopeOf(pts);
+      el("line", {x1:X(x0), y1:Y(logScale ? k * x0 : 0), x2:X(xmax), y2:Y(k * xmax), stroke:css(c.color), "stroke-width":2, opacity:0.75}, plot);
+    });
+  }
+
+  // 반 전체 점
+  points.forEach(p => {
+    if (logScale && !(p.f > 0)) return;
+    const c = COMP.find(c => c.key === p.comp);
+    const dot = el("circle", {cx:X(p.q), cy:Y(p.f), r:5.5, fill:css(c.color), "fill-opacity":0.8, stroke:css("--panel"), "stroke-width":1.2}, plot);
+    hover(dot, `${c.name} 행성\nq = ${fmt(p.q)}, f = ${fmt(p.f)}\n자전 ${p.P.toFixed(1)}시간, 밀도 ${p.rho.toFixed(2)} g/cm³`);
+  });
+
+  // 실제 행성
+  if (showReal){
+    REAL.forEach(p => {
+      const cx = X(p.q), cy = Y(p.f), s = 7;
+      const d = el("path", {d:`M${cx} ${cy - s}L${cx + s} ${cy}L${cx} ${cy + s}L${cx - s} ${cy}Z`, fill:css("--panel"), stroke:css("--real"), "stroke-width":2}, plot);
+      el("text", {x:cx + 10, y:cy - 8, "font-size":13, "font-weight":700, fill:ink, stroke:css("--panel"), "stroke-width":4, "paint-order":"stroke", "stroke-linejoin":"round"}, plot, p.name);
+      hover(d, `${p.name} (NASA)\nq = ${fmt(p.q)}, f = ${fmt(p.f)}`);
+    });
+  }
+
+  // 범례
+  const lg = el("g", {transform:`translate(${M.l + 14},${M.t + 14})`}, svg);
+  let ly = 0;
+  COMP.forEach(c => {
+    if (!points.some(p => p.comp === c.key)) return;
+    el("circle", {cx:6, cy:ly, r:5.5, fill:css(c.color)}, lg);
+    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink}, lg, c.name);
+    ly += 20;
+  });
+  if (showReal){
+    el("path", {d:`M6 ${ly - 6}L12 ${ly}L6 ${ly + 6}L0 ${ly}Z`, fill:css("--panel"), stroke:css("--real"), "stroke-width":2}, lg);
+    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink}, lg, "실제 행성");
+  }
+}
+
+function niceMax(v){
+  if (!(v > 0)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(v))), m = v / e;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e;
+}
+function linTicks(max){ const step = niceMax(max / 5); const t = []; for (let v = 0; v <= max + 1e-12; v += step) t.push(+v.toPrecision(6)); return t; }
+function logTicks(a, b){
+  const t = [];
+  for (let e = Math.floor(Math.log10(a)); e <= Math.ceil(Math.log10(b)); e++)
+    [1, 2, 5].forEach(m => { const v = m * Math.pow(10, e); if (v >= a && v <= b) t.push(v); });
+  return t;
+}
+
+function renderSlopes(){
+  $("slopes").innerHTML = COMP.map(c => {
+    const pts = points.filter(p => p.comp === c.key);
+    const k = pts.length >= 2 ? slopeOf(pts).toFixed(2) : "–";
+    return `<tr><td><span class="legend-dot" style="background:var(${c.color})"></span>${c.name}</td><td class="num">${pts.length}</td><td class="num">${k}</td></tr>`;
+  }).join("");
+}
+
+/* 툴팁 */
+const tip = $("tip");
+function hover(node, text){
+  node.style.cursor = "default";
+  node.addEventListener("pointerenter", e => { tip.textContent = ""; text.split("\n").forEach((l, i) => { if (i) tip.appendChild(document.createElement("br")); tip.appendChild(document.createTextNode(l)); }); tip.style.display = "block"; move(e); });
+  node.addEventListener("pointermove", move);
+  node.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+}
+function move(e){
+  const box = $("chart").parentElement.getBoundingClientRect();
+  let x = e.clientX - box.left + 14, y = e.clientY - box.top + 14;
+  if (x + tip.offsetWidth > box.width) x = e.clientX - box.left - tip.offsetWidth - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+
+/* 옵션 */
+["optReal","optTrend","optApprox"].forEach(id => $(id).addEventListener("change", draw));
+$("linBtn").addEventListener("click", () => { logScale = false; $("linBtn").setAttribute("aria-pressed","true"); $("logBtn").setAttribute("aria-pressed","false"); draw(); });
+$("logBtn").addEventListener("click", () => { logScale = true; $("logBtn").setAttribute("aria-pressed","true"); $("linBtn").setAttribute("aria-pressed","false"); draw(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+
+/* 이미지 저장 (보고서용으로 항상 밝은 배경) */
+const dlP = (window.claude && window.claude.use) ? window.claude.use("downloads") : Promise.resolve(null);
+$("saveBtn").addEventListener("click", async () => {
+  const root = document.documentElement, prev = root.getAttribute("data-theme");
+  root.setAttribute("data-theme", "light"); draw();
+  const src = new XMLSerializer().serializeToString($("chart"));
+  if (prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme");
+  draw();
+  const img = new Image();
+  img.onload = async () => {
+    const c = document.createElement("canvas"); c.width = W * 2; c.height = H * 2;
+    const x = c.getContext("2d"); x.fillStyle = "#ffffff"; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, "image/png"));
+    const name = "편평도-그래프.png", dl = await dlP;
+    if (dl){
+      try{ await dl.save({filename:name, data:blob}); }
+      catch(e){ if (e && e.code !== "declined") setStatus("이 화면에서는 이미지를 저장할 수 없어요.", true); }
+      return;
+    }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(src.replace("<svg", `<svg font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif"`));
+});
+
+if (DATA_URL){ $("url").value = DATA_URL; loadUrl(DATA_URL); } else draw();
+})();
+</script>
+</body>
+</html>
