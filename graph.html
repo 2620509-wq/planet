@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>편평도 그래프 — 반 전체 데이터</title>
+<title>무엇이 편평도를 정할까? 반 전체 그래프</title>
 <style>
 :root{
   --paper:#eef3f6; --grid:#d5e1e9; --ink:#1d2a36; --muted:#5b6b78; --line:#c3d2dc;
@@ -57,9 +57,16 @@ button{cursor:pointer}
 
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
 @media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
-.chart-wrap{position:relative;padding:10px 10px 6px}
-#chart{width:100%;height:auto;display:block}
-#chart text{font-family:var(--sans)}
+.charts{display:grid;gap:18px}
+.chart-wrap{position:relative;padding:14px 12px 8px}
+.chart-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between;padding:0 6px 4px}
+.chart-head h2{font-family:var(--serif);font-size:1.1rem;margin:0}
+.chart-head .r2{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:auto}
+.chart-head .btn{padding:6px 12px;font-size:.88rem}
+.chart-wrap svg{width:100%;height:auto;display:block}
+.chart-wrap svg text{font-family:var(--sans)}
+.side{position:sticky;top:calc(16px + env(safe-area-inset-top,0px))}
+@media (max-width:900px){.side{position:static}}
 .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;
   padding:7px 10px;font-size:.85rem;box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;display:none}
 .side{display:grid;gap:14px}
@@ -80,8 +87,8 @@ tr:last-child td{border-bottom:0}
 </head>
 <body>
 <main>
-  <h1>q와 편평도, 반 전체 그래프</h1>
-  <p class="sub">반 전체가 만든 행성의 원심력·중력 비 q와 편평도 f를 한 그래프에 모읍니다. 성분별 추세선과 실제 행성을 함께 놓고 가설을 검증하세요.</p>
+  <h1>무엇이 편평도를 정할까? 반 전체 그래프</h1>
+  <p class="sub">반 전체가 만든 행성의 편평도 f를 세 가지 x축(q, ω², 1/ρ)에 각각 그려 봅니다. 어느 변수가 편평도를 가장 잘 설명하는지 결정계수 R²로 비교하세요.</p>
 
   <section class="panel loader" aria-label="데이터 불러오기">
     <div class="loader-row">
@@ -94,15 +101,13 @@ tr:last-child td{border-bottom:0}
   </section>
 
   <div class="layout">
-    <section class="panel chart-wrap" aria-label="그래프">
-      <svg id="chart" viewBox="0 0 820 540" role="img" aria-label="q와 편평도 산점도"></svg>
-      <div class="tip" id="tip"></div>
-    </section>
+    <div class="charts" id="charts"></div>
 
     <aside class="side">
       <div class="panel">
         <h2>표시</h2>
-        <label class="check"><input type="checkbox" id="optTrend" checked><span>성분별 추세선 (원점을 지나는 직선)</span></label>
+        <label class="check"><input type="checkbox" id="optTrend" checked><span>성분별 추세선 (q 그래프)</span></label>
+        <label class="check"><input type="checkbox" id="optFit" checked><span>전체 추세선 (ω², 1/ρ 그래프)</span></label>
         <label class="check"><input type="checkbox" id="optReal" checked><span>실제 행성 6개 (NASA 자료)</span></label>
         <label class="check"><input type="checkbox" id="optApprox"><span>근사식 f = 1.25q (활동 5)</span></label>
         <div>축 눈금
@@ -111,19 +116,25 @@ tr:last-child td{border-bottom:0}
             <button id="logBtn" aria-pressed="false">로그</button>
           </div>
         </div>
-        <p class="note">지구·화성처럼 q가 아주 작은 점은 로그 눈금에서 잘 보입니다.</p>
       </div>
 
       <div class="panel">
-        <h2>성분별 추세선</h2>
+        <h2>어느 변수가 더 잘 맞을까?</h2>
+        <table>
+          <thead><tr><th>x축 변수</th><th class="num">R² (반 전체)</th></tr></thead>
+          <tbody id="r2"></tbody>
+        </table>
+        <p class="note">R²는 0~1 사이 값으로, 1에 가까울수록 점들이 한 직선에 잘 모여 있다는 뜻입니다.</p>
+      </div>
+
+      <div class="panel">
+        <h2>성분별 추세선 (q 그래프)</h2>
         <table>
           <thead><tr><th>성분</th><th class="num">행성 수</th><th class="num">기울기 f ÷ q</th></tr></thead>
           <tbody id="slopes"></tbody>
         </table>
         <p class="note">기울기는 원점을 지나는 직선을 최소제곱법으로 맞춘 값입니다.</p>
       </div>
-
-      <button class="btn" id="saveBtn">그래프 이미지 저장</button>
     </aside>
   </div>
 </main>
@@ -132,7 +143,7 @@ tr:last-child td{border-bottom:0}
 (() => {
 "use strict";
 
-/* 데이터 주소를 미리 넣어 두면 페이지를 열 때 자동으로 불러옵니다. */
+/* 데이터 주소: 페이지를 열면 자동으로 불러옵니다. */
 const DATA_URL = "https://script.google.com/macros/s/AKfycbw_vsgGAu5SBK7K7TsGAQnrUh3NV-oyNwZHrJqRJhT5YLeVYgIbZb0iFfLvTNPbNVu1yg/exec";
 
 const G = 6.674e-11;
@@ -142,19 +153,37 @@ const COMP = [
   {key:"Water-Ice", name:"얼음", color:"--ice"},
   {key:"Gas-Giant", name:"기체", color:"--gas"}
 ];
+const VARS = [
+  {key:"q",   title:"편평도와 q",   axis:"q (적도에서 원심력 ÷ 중력)", get:p => p.q},
+  {key:"w2",  title:"편평도와 ω²",  axis:"ω² (rad²/s²)",               get:p => p.w2},
+  {key:"inv", title:"편평도와 1/ρ", axis:"1/ρ (cm³/g)",                get:p => 1 / p.rho}
+];
+
+function makePoint(comp, P, rho, f, name){
+  const w = 2 * Math.PI / (P * 3600);
+  return {comp, P, rho, f, name, w2:w * w, q:3 * w * w / (4 * Math.PI * G * rho * 1000)};
+}
 const REAL = [
   ["목성",9.93,1.33,0.0649],["토성",10.66,0.69,0.0980],["천왕성",17.24,1.27,0.0229],
   ["해왕성",16.11,1.64,0.0171],["지구",23.93,5.51,0.00335],["화성",24.62,3.93,0.00589]
-].map(([name,P,rho,f]) => ({name, q:qOf(P,rho), f}));
-
-function qOf(periodH, densityGcc){
-  const w = 2 * Math.PI / (periodH * 3600);
-  return 3 * w * w / (4 * Math.PI * G * densityGcc * 1000);
-}
+].map(([n,P,rho,f]) => makePoint(null, P, rho, f, n));
 
 const $ = id => document.getElementById(id);
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 let points = [], logScale = false;
+
+/* ---------- 그래프 틀 만들기 ---------- */
+const charts = {};
+VARS.forEach(v => {
+  const wrap = document.createElement("section");
+  wrap.className = "panel chart-wrap";
+  wrap.setAttribute("aria-label", v.title);
+  wrap.innerHTML = `<div class="chart-head"><h2>${v.title}</h2><span class="r2"></span><button class="btn ghost">이미지 저장</button></div>
+    <svg viewBox="0 0 820 500" role="img" aria-label="${v.title} 산점도"></svg><div class="tip"></div>`;
+  $("charts").appendChild(wrap);
+  charts[v.key] = {v, svg:wrap.querySelector("svg"), tip:wrap.querySelector(".tip"), r2:wrap.querySelector(".r2"), wrap};
+  wrap.querySelector("button").addEventListener("click", () => saveChart(v.key));
+});
 
 /* ---------- 불러오기 ---------- */
 function setStatus(msg, err){ const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
@@ -181,11 +210,11 @@ function parseCSV(text){
 
 function toPoints(rows){
   const latest = new Map(), out = [];
-  rows.forEach((r, i) => {
+  rows.forEach(r => {
     const comp = String(r.composition || "").trim();
     const P = parseFloat(r.periodH), rho = parseFloat(r.density), f = parseFloat(r.f);
     if (!COMP.some(c => c.key === comp) || !(P > 0) || !(rho > 0) || !(f >= 0)) return;
-    const p = {comp, q:qOf(P, rho), f, P, rho};
+    const p = makePoint(comp, P, rho, f);
     const who = r.student ? String(r.student).trim() : "";
     if (who) latest.set(who, p); else out.push(p);
   });
@@ -194,9 +223,9 @@ function toPoints(rows){
 
 function useRows(rows, source){
   points = toPoints(rows);
-  if (!points.length){ setStatus(`${source}에서 쓸 수 있는 행성 데이터를 찾지 못했어요. composition, density, periodH, f 열이 있는지 확인하세요.`, true); }
+  if (!points.length) setStatus(`${source}에서 쓸 수 있는 행성 데이터를 찾지 못했어요. 아직 제출된 결과가 없거나, composition, density, periodH, f 열이 없는 것 같아요.`, true);
   else setStatus(`${source}에서 행성 ${points.length}개를 불러왔어요.`);
-  draw();
+  drawAll();
 }
 
 async function loadUrl(url){
@@ -205,16 +234,13 @@ async function loadUrl(url){
   try{
     const res = await fetch(url, {redirect:"follow"});
     if (!res.ok) throw new Error(res.status);
-    const text = await res.text();
-    const t = text.trim();
+    const t = (await res.text()).trim();
     let rows;
-    if (t.startsWith("{") || t.startsWith("[")){
-      const j = JSON.parse(t);
-      rows = Array.isArray(j) ? j : (j.rows || []);
-    } else rows = parseCSV(text);
-    useRows(rows, "주소");
+    if (t.startsWith("{") || t.startsWith("[")){ const j = JSON.parse(t); rows = Array.isArray(j) ? j : (j.rows || []); }
+    else rows = parseCSV(t);
+    useRows(rows, "시트");
   }catch(e){
-    setStatus("주소에서 데이터를 불러오지 못했어요. 주소와 배포 설정을 확인하거나, 시트를 CSV로 내려받아 \"CSV 파일 열기\"를 쓰세요.", true);
+    setStatus("시트에서 데이터를 불러오지 못했어요. Apps Script를 새 버전으로 다시 배포했는지 확인하거나, 시트를 CSV로 내려받아 \"CSV 파일 열기\"를 쓰세요.", true);
   }
 }
 
@@ -230,8 +256,7 @@ $("file").addEventListener("change", async e => {
 $("demoBtn").addEventListener("click", () => {
   const I = {"Iron":0.35,"Rocky":0.33,"Water-Ice":0.26,"Gas-Giant":0.22};
   const K = {"Iron":0.77,"Rocky":1.0,"Water-Ice":1.43};
-  const ME = 5.972e24, RE = 6.371e6, RJ = 6.9911e7;
-  const rows = [];
+  const ME = 5.972e24, RE = 6.371e6, RJ = 6.9911e7, rows = [];
   for (let i = 0; i < 28; i++){
     const comp = COMP[Math.floor(Math.random() * 4)].key;
     const [lo, hi] = comp === "Gas-Giant" ? [90, 300] : [0.1, 20];
@@ -248,8 +273,8 @@ $("demoBtn").addEventListener("click", () => {
   useRows(rows, "예시 데이터");
 });
 
-/* ---------- 그래프 ---------- */
-const W = 820, H = 540, M = {l:78, r:24, t:22, b:62};
+/* ---------- 계산 도구 ---------- */
+const W = 820, H = 500, M = {l:84, r:24, t:18, b:62};
 const ns = "http://www.w3.org/2000/svg";
 function el(tag, attrs, parent, text){
   const e = document.createElementNS(ns, tag);
@@ -257,126 +282,32 @@ function el(tag, attrs, parent, text){
   if (text != null) e.textContent = text;
   parent.appendChild(e); return e;
 }
-function slopeOf(pts){
-  let sxy = 0, sxx = 0; pts.forEach(p => { sxy += p.q * p.f; sxx += p.q * p.q; });
-  return sxx ? sxy / sxx : NaN;
+function originSlope(xs, ys){ let a = 0, b = 0; xs.forEach((x, i) => { a += x * ys[i]; b += x * x; }); return b ? a / b : NaN; }
+function linFit(xs, ys){
+  const n = xs.length; if (n < 3) return null;
+  const mx = xs.reduce((s, v) => s + v, 0) / n, my = ys.reduce((s, v) => s + v, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+  if (!sxx || !syy) return null;
+  const a = sxy / sxx;
+  return {a, b:my - a * mx, r2:(sxy * sxy) / (sxx * syy)};
 }
+const SUP = {"-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹"};
 function fmt(v){
   if (v === 0) return "0";
   const a = Math.abs(v);
-  if (a >= 0.1) return v.toFixed(2);
-  if (a >= 0.01) return v.toFixed(3);
-  if (a >= 0.001) return v.toFixed(4);
-  return v.toExponential(1);
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 0.1) return +v.toFixed(2) + "";
+  if (a >= 0.001) return +v.toPrecision(2) + "";
+  const e = Math.floor(Math.log10(a)), m = v / Math.pow(10, e);
+  return `${+m.toFixed(1)}×10${String(e).split("").map(c => SUP[c]).join("")}`;
 }
-
-function draw(){
-  const svg = $("chart"); svg.innerHTML = "";
-  const showReal = $("optReal").checked, showTrend = $("optTrend").checked, showApprox = $("optApprox").checked;
-  const ink = css("--ink"), muted = css("--muted"), grid = css("--grid"), line = css("--line");
-
-  const all = points.concat(showReal ? REAL : []);
-  renderSlopes();
-  if (!all.length){
-    el("text", {x:W/2, y:H/2, "text-anchor":"middle", class:"empty"}, svg, "데이터를 불러오면 여기에 그래프가 그려집니다.");
-    return;
-  }
-
-  let xmin, xmax, ymin, ymax, X, Y, xt, yt;
-  const qs = all.map(p => p.q), fs = all.map(p => p.f).filter(v => v > 0);
-  if (logScale){
-    xmin = Math.min(...qs) / 1.6; xmax = Math.max(...qs) * 1.6;
-    ymin = Math.min(...fs) / 1.6; ymax = Math.max(...fs) * 1.6;
-    if (showApprox){ ymax = Math.max(ymax, 1.25 * xmax); }
-    const lx = v => (Math.log10(v) - Math.log10(xmin)) / (Math.log10(xmax) - Math.log10(xmin));
-    const ly = v => (Math.log10(v) - Math.log10(ymin)) / (Math.log10(ymax) - Math.log10(ymin));
-    X = v => M.l + lx(v) * (W - M.l - M.r);
-    Y = v => H - M.b - ly(v) * (H - M.t - M.b);
-    xt = logTicks(xmin, xmax); yt = logTicks(ymin, ymax);
-  } else {
-    xmin = 0; ymin = 0;
-    xmax = niceMax(Math.max(...qs) * 1.06);
-    ymax = niceMax(Math.max(...all.map(p => p.f), showApprox ? 1.25 * Math.max(...qs) : 0) * 1.06);
-    X = v => M.l + (v - xmin) / (xmax - xmin) * (W - M.l - M.r);
-    Y = v => H - M.b - (v - ymin) / (ymax - ymin) * (H - M.t - M.b);
-    xt = linTicks(xmax); yt = linTicks(ymax);
-  }
-
-  // 격자와 눈금
-  const g = el("g", {}, svg);
-  xt.forEach(v => {
-    el("line", {x1:X(v), x2:X(v), y1:M.t, y2:H - M.b, stroke:grid, "stroke-width":1}, g);
-    el("text", {x:X(v), y:H - M.b + 20, "text-anchor":"middle", "font-size":13, fill:muted}, g, fmt(v));
-  });
-  yt.forEach(v => {
-    el("line", {x1:M.l, x2:W - M.r, y1:Y(v), y2:Y(v), stroke:grid, "stroke-width":1}, g);
-    el("text", {x:M.l - 10, y:Y(v) + 4, "text-anchor":"end", "font-size":13, fill:muted}, g, fmt(v));
-  });
-  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b, fill:"none", stroke:line}, g);
-  el("text", {x:(M.l + W - M.r) / 2, y:H - 14, "text-anchor":"middle", "font-size":14, fill:ink}, g, "q (적도에서 원심력 ÷ 중력)");
-  el("text", {x:18, y:(M.t + H - M.b) / 2, "text-anchor":"middle", "font-size":14, fill:ink, transform:`rotate(-90 18 ${(M.t + H - M.b) / 2})`}, g, "편평도 f");
-
-  const clip = el("clipPath", {id:"plot"}, el("defs", {}, svg));
-  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b}, clip);
-  const plot = el("g", {"clip-path":"url(#plot)"}, svg);
-  const x0 = logScale ? xmin : 0;
-
-  // 근사식 직선
-  if (showApprox){
-    el("line", {x1:X(x0), y1:Y(logScale ? 1.25 * x0 : 0), x2:X(xmax), y2:Y(1.25 * xmax), stroke:ink, "stroke-width":2, "stroke-dasharray":"8 6"}, plot);
-    const lxp = Math.min(xmax / 1.15, (ymax / 1.25) / 1.1);
-    el("text", {x:X(lxp) - 6, y:Y(1.25 * lxp) - 10, "text-anchor":"end", "font-size":13, fill:ink}, plot, "f = 1.25q");
-  }
-
-  // 성분별 추세선
-  if (showTrend){
-    COMP.forEach(c => {
-      const pts = points.filter(p => p.comp === c.key);
-      if (pts.length < 2) return;
-      const k = slopeOf(pts);
-      el("line", {x1:X(x0), y1:Y(logScale ? k * x0 : 0), x2:X(xmax), y2:Y(k * xmax), stroke:css(c.color), "stroke-width":2, opacity:0.75}, plot);
-    });
-  }
-
-  // 반 전체 점
-  points.forEach(p => {
-    if (logScale && !(p.f > 0)) return;
-    const c = COMP.find(c => c.key === p.comp);
-    const dot = el("circle", {cx:X(p.q), cy:Y(p.f), r:5.5, fill:css(c.color), "fill-opacity":0.8, stroke:css("--panel"), "stroke-width":1.2}, plot);
-    hover(dot, `${c.name} 행성\nq = ${fmt(p.q)}, f = ${fmt(p.f)}\n자전 ${p.P.toFixed(1)}시간, 밀도 ${p.rho.toFixed(2)} g/cm³`);
-  });
-
-  // 실제 행성
-  if (showReal){
-    REAL.forEach(p => {
-      const cx = X(p.q), cy = Y(p.f), s = 7;
-      const d = el("path", {d:`M${cx} ${cy - s}L${cx + s} ${cy}L${cx} ${cy + s}L${cx - s} ${cy}Z`, fill:css("--panel"), stroke:css("--real"), "stroke-width":2}, plot);
-      el("text", {x:cx + 10, y:cy - 8, "font-size":13, "font-weight":700, fill:ink, stroke:css("--panel"), "stroke-width":4, "paint-order":"stroke", "stroke-linejoin":"round"}, plot, p.name);
-      hover(d, `${p.name} (NASA)\nq = ${fmt(p.q)}, f = ${fmt(p.f)}`);
-    });
-  }
-
-  // 범례
-  const lg = el("g", {transform:`translate(${M.l + 14},${M.t + 14})`}, svg);
-  let ly = 0;
-  COMP.forEach(c => {
-    if (!points.some(p => p.comp === c.key)) return;
-    el("circle", {cx:6, cy:ly, r:5.5, fill:css(c.color)}, lg);
-    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink}, lg, c.name);
-    ly += 20;
-  });
-  if (showReal){
-    el("path", {d:`M6 ${ly - 6}L12 ${ly}L6 ${ly + 6}L0 ${ly}Z`, fill:css("--panel"), stroke:css("--real"), "stroke-width":2}, lg);
-    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink}, lg, "실제 행성");
-  }
-}
-
 function niceMax(v){
   if (!(v > 0)) return 1;
   const e = Math.pow(10, Math.floor(Math.log10(v))), m = v / e;
   return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e;
 }
-function linTicks(max){ const step = niceMax(max / 5); const t = []; for (let v = 0; v <= max + 1e-12; v += step) t.push(+v.toPrecision(6)); return t; }
+function linTicks(max){ const step = niceMax(max / 5), t = []; for (let i = 0; i * step <= max * (1 + 1e-9); i++) t.push(i * step); return t; }
 function logTicks(a, b){
   const t = [];
   for (let e = Math.floor(Math.log10(a)); e <= Math.ceil(Math.log10(b)); e++)
@@ -384,50 +315,183 @@ function logTicks(a, b){
   return t;
 }
 
-function renderSlopes(){
+/* ---------- 그리기 ---------- */
+function drawAll(){
+  VARS.forEach(v => drawChart(charts[v.key]));
+  renderTables();
+}
+
+function drawChart(ch){
+  const {v, svg} = ch;
+  svg.innerHTML = "";
+  const showReal = $("optReal").checked, showTrend = $("optTrend").checked;
+  const showFit = $("optFit").checked, showApprox = $("optApprox").checked && v.key === "q";
+  const ink = css("--ink"), muted = css("--muted"), grid = css("--grid"), line = css("--line"), panel = css("--panel");
+
+  const fit = linFit(points.map(v.get), points.map(p => p.f));
+  ch.r2.textContent = fit ? `R² = ${fit.r2.toFixed(3)}` : "";
+
+  const all = points.concat(showReal ? REAL : []).filter(p => !logScale || p.f > 0);
+  if (!all.length){
+    el("text", {x:W/2, y:H/2, "text-anchor":"middle", class:"empty"}, svg, "데이터를 불러오면 여기에 그래프가 그려집니다.");
+    return;
+  }
+
+  const xs = all.map(v.get), fs = all.map(p => p.f);
+  let xmin, xmax, ymin, ymax, X, Y, xt, yt;
+  if (logScale){
+    xmin = Math.min(...xs) / 1.6; xmax = Math.max(...xs) * 1.6;
+    ymin = Math.min(...fs) / 1.6; ymax = Math.max(...fs) * 1.6;
+    if (showApprox) ymax = Math.max(ymax, 1.25 * xmax);
+    const L = Math.log10;
+    X = x => M.l + (L(x) - L(xmin)) / (L(xmax) - L(xmin)) * (W - M.l - M.r);
+    Y = y => H - M.b - (L(y) - L(ymin)) / (L(ymax) - L(ymin)) * (H - M.t - M.b);
+    xt = logTicks(xmin, xmax); yt = logTicks(ymin, ymax);
+  } else {
+    xmin = 0; ymin = 0;
+    xmax = niceMax(Math.max(...xs) * 1.06);
+    ymax = niceMax(Math.max(...fs, showApprox ? 1.25 * Math.max(...xs) : 0) * 1.06);
+    X = x => M.l + x / xmax * (W - M.l - M.r);
+    Y = y => H - M.b - y / ymax * (H - M.t - M.b);
+    xt = linTicks(xmax); yt = linTicks(ymax);
+  }
+
+  const g = el("g", {}, svg);
+  xt.forEach(t => {
+    el("line", {x1:X(t), x2:X(t), y1:M.t, y2:H - M.b, stroke:grid}, g);
+    el("text", {x:X(t), y:H - M.b + 20, "text-anchor":"middle", "font-size":13, fill:muted}, g, fmt(t));
+  });
+  yt.forEach(t => {
+    el("line", {x1:M.l, x2:W - M.r, y1:Y(t), y2:Y(t), stroke:grid}, g);
+    el("text", {x:M.l - 10, y:Y(t) + 4, "text-anchor":"end", "font-size":13, fill:muted}, g, fmt(t));
+  });
+  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b, fill:"none", stroke:line}, g);
+  el("text", {x:(M.l + W - M.r) / 2, y:H - 14, "text-anchor":"middle", "font-size":14, fill:ink}, g, v.axis);
+  const cy = (M.t + H - M.b) / 2;
+  el("text", {x:20, y:cy, "text-anchor":"middle", "font-size":14, fill:ink, transform:`rotate(-90 20 ${cy})`}, g, "편평도 f");
+
+  const clipId = "clip-" + v.key;
+  el("rect", {x:M.l, y:M.t, width:W - M.l - M.r, height:H - M.t - M.b}, el("clipPath", {id:clipId}, el("defs", {}, svg)));
+  const plot = el("g", {"clip-path":`url(#${clipId})`}, svg);
+
+  // 전체 추세선 (ω², 1/ρ)
+  if (showFit && v.key !== "q" && fit){
+    const x1 = logScale ? xmin : 0;
+    const steps = 60, pts = [];
+    for (let i = 0; i <= steps; i++){
+      const x = logScale ? xmin * Math.pow(xmax / xmin, i / steps) : x1 + (xmax - x1) * i / steps;
+      const y = fit.a * x + fit.b;
+      if (!logScale || y > 0) pts.push(`${X(x).toFixed(1)},${Y(y).toFixed(1)}`);
+    }
+    if (pts.length > 1) el("polyline", {points:pts.join(" "), fill:"none", stroke:muted, "stroke-width":2, "stroke-dasharray":"6 5"}, plot);
+  }
+
+  // 성분별 추세선 (q)
+  if (showTrend && v.key === "q"){
+    COMP.forEach(c => {
+      const pts = points.filter(p => p.comp === c.key);
+      if (pts.length < 2) return;
+      const k = originSlope(pts.map(p => p.q), pts.map(p => p.f)), x0 = logScale ? xmin : 0;
+      el("line", {x1:X(x0), y1:Y(logScale ? k * x0 : 0), x2:X(xmax), y2:Y(k * xmax), stroke:css(c.color), "stroke-width":2, opacity:0.75}, plot);
+    });
+  }
+
+  // 근사식
+  if (showApprox){
+    const x0 = logScale ? xmin : 0;
+    el("line", {x1:X(x0), y1:Y(logScale ? 1.25 * x0 : 0), x2:X(xmax), y2:Y(1.25 * xmax), stroke:ink, "stroke-width":2, "stroke-dasharray":"8 6"}, plot);
+    const lx = Math.min(xmax / 1.15, (ymax / 1.25) / 1.1);
+    el("text", {x:X(lx) - 6, y:Y(1.25 * lx) - 10, "text-anchor":"end", "font-size":13, fill:ink, stroke:panel, "stroke-width":4, "paint-order":"stroke"}, plot, "f = 1.25q");
+  }
+
+  // 반 전체 점
+  points.forEach(p => {
+    if (logScale && !(p.f > 0)) return;
+    const c = COMP.find(c => c.key === p.comp);
+    const dot = el("circle", {cx:X(v.get(p)), cy:Y(p.f), r:5.5, fill:css(c.color), "fill-opacity":0.8, stroke:panel, "stroke-width":1.2}, plot);
+    hover(ch, dot, `${c.name} 행성\n${v.key === "q" ? "q" : v.key === "w2" ? "ω²" : "1/ρ"} = ${fmt(v.get(p))}, f = ${fmt(p.f)}\n자전 ${p.P.toFixed(1)}시간, 밀도 ${p.rho.toFixed(2)} g/cm³`);
+  });
+
+  // 실제 행성
+  if (showReal){
+    REAL.forEach(p => {
+      const cx = X(v.get(p)), cy = Y(p.f), s = 7;
+      const d = el("path", {d:`M${cx} ${cy - s}L${cx + s} ${cy}L${cx} ${cy + s}L${cx - s} ${cy}Z`, fill:panel, stroke:css("--real"), "stroke-width":2}, plot);
+      el("text", {x:cx + 10, y:cy - 8, "font-size":13, "font-weight":700, fill:ink, stroke:panel, "stroke-width":4, "paint-order":"stroke", "stroke-linejoin":"round"}, plot, p.name);
+      hover(ch, d, `${p.name} (NASA)\nf = ${fmt(p.f)}, 자전 ${p.P}시간, 밀도 ${p.rho} g/cm³`);
+    });
+  }
+
+  // 범례
+  const lg = el("g", {transform:`translate(${M.l + 14},${M.t + 16})`}, svg);
+  let ly = 0;
+  COMP.forEach(c => {
+    if (!points.some(p => p.comp === c.key)) return;
+    el("circle", {cx:6, cy:ly, r:5.5, fill:css(c.color)}, lg);
+    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink, stroke:panel, "stroke-width":4, "paint-order":"stroke"}, lg, c.name);
+    ly += 20;
+  });
+  if (showReal){
+    el("path", {d:`M6 ${ly - 6}L12 ${ly}L6 ${ly + 6}L0 ${ly}Z`, fill:panel, stroke:css("--real"), "stroke-width":2}, lg);
+    el("text", {x:18, y:ly + 4, "font-size":13, fill:ink, stroke:panel, "stroke-width":4, "paint-order":"stroke"}, lg, "실제 행성");
+  }
+}
+
+function renderTables(){
+  $("r2").innerHTML = VARS.map(v => {
+    const fit = linFit(points.map(v.get), points.map(p => p.f));
+    const name = v.key === "q" ? "q" : v.key === "w2" ? "ω² (자전만)" : "1/ρ (밀도만)";
+    return `<tr><td>${name}</td><td class="num">${fit ? fit.r2.toFixed(3) : "–"}</td></tr>`;
+  }).join("");
   $("slopes").innerHTML = COMP.map(c => {
     const pts = points.filter(p => p.comp === c.key);
-    const k = pts.length >= 2 ? slopeOf(pts).toFixed(2) : "–";
+    const k = pts.length >= 2 ? originSlope(pts.map(p => p.q), pts.map(p => p.f)).toFixed(2) : "–";
     return `<tr><td><span class="legend-dot" style="background:var(${c.color})"></span>${c.name}</td><td class="num">${pts.length}</td><td class="num">${k}</td></tr>`;
   }).join("");
 }
 
 /* 툴팁 */
-const tip = $("tip");
-function hover(node, text){
-  node.style.cursor = "default";
-  node.addEventListener("pointerenter", e => { tip.textContent = ""; text.split("\n").forEach((l, i) => { if (i) tip.appendChild(document.createElement("br")); tip.appendChild(document.createTextNode(l)); }); tip.style.display = "block"; move(e); });
+function hover(ch, node, text){
+  const tip = ch.tip;
+  const move = e => {
+    const box = ch.wrap.getBoundingClientRect();
+    let x = e.clientX - box.left + 14, y = e.clientY - box.top + 14;
+    if (x + tip.offsetWidth > box.width) x = e.clientX - box.left - tip.offsetWidth - 14;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  };
+  node.addEventListener("pointerenter", e => {
+    tip.textContent = "";
+    text.split("\n").forEach((l, i) => { if (i) tip.appendChild(document.createElement("br")); tip.appendChild(document.createTextNode(l)); });
+    tip.style.display = "block"; move(e);
+  });
   node.addEventListener("pointermove", move);
   node.addEventListener("pointerleave", () => { tip.style.display = "none"; });
 }
-function move(e){
-  const box = $("chart").parentElement.getBoundingClientRect();
-  let x = e.clientX - box.left + 14, y = e.clientY - box.top + 14;
-  if (x + tip.offsetWidth > box.width) x = e.clientX - box.left - tip.offsetWidth - 14;
-  tip.style.left = x + "px"; tip.style.top = y + "px";
-}
 
 /* 옵션 */
-["optReal","optTrend","optApprox"].forEach(id => $(id).addEventListener("change", draw));
-$("linBtn").addEventListener("click", () => { logScale = false; $("linBtn").setAttribute("aria-pressed","true"); $("logBtn").setAttribute("aria-pressed","false"); draw(); });
-$("logBtn").addEventListener("click", () => { logScale = true; $("logBtn").setAttribute("aria-pressed","true"); $("linBtn").setAttribute("aria-pressed","false"); draw(); });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+["optReal","optTrend","optFit","optApprox"].forEach(id => $(id).addEventListener("change", drawAll));
+$("linBtn").addEventListener("click", () => { logScale = false; $("linBtn").setAttribute("aria-pressed","true"); $("logBtn").setAttribute("aria-pressed","false"); drawAll(); });
+$("logBtn").addEventListener("click", () => { logScale = true; $("logBtn").setAttribute("aria-pressed","true"); $("linBtn").setAttribute("aria-pressed","false"); drawAll(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
 
 /* 이미지 저장 (보고서용으로 항상 밝은 배경) */
 const dlP = (window.claude && window.claude.use) ? window.claude.use("downloads") : Promise.resolve(null);
-$("saveBtn").addEventListener("click", async () => {
-  const root = document.documentElement, prev = root.getAttribute("data-theme");
-  root.setAttribute("data-theme", "light"); draw();
-  const src = new XMLSerializer().serializeToString($("chart"));
+async function saveChart(key){
+  const ch = charts[key], root = document.documentElement, prev = root.getAttribute("data-theme");
+  root.setAttribute("data-theme", "light"); drawChart(ch);
+  let src = new XMLSerializer().serializeToString(ch.svg);
   if (prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme");
-  draw();
+  drawChart(ch);
+  src = src.replace("<svg", `<svg font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif"`);
   const img = new Image();
   img.onload = async () => {
-    const c = document.createElement("canvas"); c.width = W * 2; c.height = H * 2;
+    const c = document.createElement("canvas"); c.width = W * 2; c.height = (H + 50) * 2;
     const x = c.getContext("2d"); x.fillStyle = "#ffffff"; x.fillRect(0, 0, c.width, c.height);
-    x.drawImage(img, 0, 0, c.width, c.height);
+    x.fillStyle = "#1d2a36"; x.font = "700 34px Malgun Gothic, Apple SD Gothic Neo, sans-serif";
+    x.fillText(`${ch.v.title}   ${ch.r2.textContent}`, 40, 56);
+    x.drawImage(img, 0, 100, W * 2, H * 2);
     const blob = await new Promise(r => c.toBlob(r, "image/png"));
-    const name = "편평도-그래프.png", dl = await dlP;
+    const name = `${ch.v.title}.png`, dl = await dlP;
     if (dl){
       try{ await dl.save({filename:name, data:blob}); }
       catch(e){ if (e && e.code !== "declined") setStatus("이 화면에서는 이미지를 저장할 수 없어요.", true); }
@@ -436,10 +500,11 @@ $("saveBtn").addEventListener("click", async () => {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
-  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(src.replace("<svg", `<svg font-family="Malgun Gothic, Apple SD Gothic Neo, sans-serif"`));
-});
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(src);
+}
 
-if (DATA_URL){ $("url").value = DATA_URL; loadUrl(DATA_URL); } else draw();
+drawAll();
+if (DATA_URL){ $("url").value = DATA_URL; loadUrl(DATA_URL); }
 })();
 </script>
 </body>
